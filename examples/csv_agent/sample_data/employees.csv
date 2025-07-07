@@ -1,0 +1,11 @@
+id,name,department,salary,hire_date,email,age
+1,John Doe,Engineering,75000,2020-01-15,john.doe@company.com,28
+2,Jane Smith,Marketing,65000,2019-03-22,jane.smith@company.com,32
+3,Mike Johnson,Engineering,80000,2021-06-10,mike.johnson@company.com,26
+4,Sarah Wilson,HR,55000,2018-09-05,sarah.wilson@company.com,35
+5,David Brown,Sales,70000,2020-11-30,david.brown@company.com,29
+6,Lisa Garcia,Engineering,85000,2019-12-01,lisa.garcia@company.com,31
+7,Tom Anderson,Marketing,60000,2021-02-14,tom.anderson@company.com,27
+8,Emma Davis,Sales,68000,2020-07-20,emma.davis@company.com,30
+9,James Miller,HR,52000,2019-08-12,james.miller@company.com,33
+10,Maria Rodriguez,Engineering,78000,2021-04-03,maria.rodriguez@company.com,25

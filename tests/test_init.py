@@ -2,25 +2,12 @@ import pytest
 import lihil_mcp
 
 
-def test_lazy_import_lihil_mcp():
-    # This should trigger the lazy import
+def test_import_lihil_mcp():
     LihilMCP = lihil_mcp.LihilMCP
     assert LihilMCP is not None
     assert LihilMCP.__name__ == "LihilMCP"
 
 
-def test_lazy_import_lihil_mcp_transport():
-    # This should trigger the lazy import
-    LihilMCPTransport = lihil_mcp.LihilMCPTransport
-    assert LihilMCPTransport is not None
-    assert LihilMCPTransport.__name__ == "LihilMCPTransport"
-
-
-def test_lazy_import_mcp_middleware():
-    # This should trigger the lazy import
-    MCPMiddleware = lihil_mcp.MCPMiddleware
-    assert MCPMiddleware is not None
-    assert MCPMiddleware.__name__ == "MCPMiddleware"
 
 
 def test_invalid_attribute_raises_error():

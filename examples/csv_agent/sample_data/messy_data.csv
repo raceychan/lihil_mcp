@@ -1,0 +1,16 @@
+id,name,age,city,income,education
+1,Alice Johnson,25,New York,50000,Bachelor
+2,Bob Smith,,Los Angeles,75000,Master
+3,Charlie Brown,30,Chicago,,Bachelor
+4,Diana Prince,28,New York,60000,
+5,Eve Wilson,35,Miami,80000,PhD
+6,Frank Miller,32,Seattle,70000,Master
+7,Grace Lee,,Boston,55000,Bachelor
+8,Alice Johnson,25,New York,50000,Bachelor
+9,Henry Davis,29,Denver,65000,Master
+10,Ivy Chen,31,San Francisco,,PhD
+11,Jack Wilson,27,Austin,58000,Bachelor
+12,Kate Brown,33,Portland,72000,Master
+13,,26,Phoenix,48000,Bachelor
+14,Liam Garcia,30,Las Vegas,62000,Master
+15,Mia Rodriguez,28,San Diego,67000,PhD

@@ -2,13 +2,15 @@
 
 import inspect
 import json
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, cast
 
 from lihil import Lihil
-from lihil.errors import MissingDependencyError
+from lihil.interface import IReceive, IScope, ISend
+from lihil.routing import Endpoint, Route
+from mcp.server.fastmcp import FastMCP
 
 from .config import MCPConfig
-from .decorators import get_mcp_metadata, is_mcp_endpoint
+from .decorators import get_mcp_metadata
 from .types import (
     MCPError,
     MCPMetadata,
@@ -16,11 +18,6 @@ from .types import (
     MCPResourceInfo,
     MCPToolInfo,
 )
-
-try:
-    from mcp.server.fastmcp import FastMCP, Context
-except ImportError as e:
-    raise MissingDependencyError("mcp") from e
 
 
 class LihilMCP:
@@ -33,31 +30,27 @@ class LihilMCP:
         self.mcp_server = FastMCP(config.server_name)
         self._tools: Dict[str, MCPToolInfo] = {}
         self._resources: Dict[str, MCPResourceInfo] = {}
-        self._endpoint_map: Dict[str, tuple["RouteBase", "Endpoint"]] = (
-            {}
-        )  # RouteBase, Endpoint
-
-        # Setup MCP tools and resources
-        self._setup_mcp_endpoints()
+        self._endpoint_map: Dict[str, Endpoint] = {}
+        self._mcp_setup_complete = False
 
     def _setup_mcp_endpoints(self) -> None:
         """Convert lihil routes to MCP tools and resources."""
-        if not hasattr(self.app, "routes"):
+        if self._mcp_setup_complete:
             return
-
+            
         for route in self.app.routes:
-            if hasattr(route, "endpoints"):
-                for method, endpoint in route.endpoints.items():
-                    try:
-                        self._register_endpoint(route, endpoint)
-                    except Exception as e:
-                        raise MCPRegistrationError(
-                            f"Failed to register endpoint {endpoint.unwrapped_func.__name__}: {e}"
-                        ) from e
+            route_obj = cast(Route, route)
+            for _, endpoint in route_obj.endpoints.items():
+                try:
+                    self._register_endpoint(route_obj, endpoint)
+                except Exception as e:
+                    raise MCPRegistrationError(
+                        f"Failed to register endpoint {endpoint.unwrapped_func.__name__}: {e}"
+                    ) from e
+        
+        self._mcp_setup_complete = True
 
-    def _register_endpoint(
-        self, route: "RouteBase", endpoint: "Endpoint"
-    ) -> None:  # route is RouteBase
+    def _register_endpoint(self, route: Route, endpoint: Endpoint) -> None:
         """Register a lihil endpoint as MCP tool or resource."""
         func = endpoint.unwrapped_func
         mcp_meta = get_mcp_metadata(func)
@@ -71,8 +64,8 @@ class LihilMCP:
             self._auto_register_endpoint(route, endpoint)
 
     def _register_as_tool(
-        self, route: "RouteBase", endpoint: "Endpoint", mcp_meta: "MCPMetadata"
-    ) -> None:  # route is RouteBase
+        self, route: Route, endpoint: Endpoint, mcp_meta: MCPMetadata
+    ) -> None:
         """Register an endpoint as an MCP tool."""
         func = endpoint.unwrapped_func
         func_name = func.__name__
@@ -85,7 +78,7 @@ class LihilMCP:
         )
 
         self._tools[func_name] = tool_info
-        self._endpoint_map[func_name] = (route, endpoint)
+        self._endpoint_map[func_name] = endpoint
 
         # Register with FastMCP
         @self.mcp_server.tool(name=func_name, description=tool_info.description)
@@ -94,8 +87,8 @@ class LihilMCP:
             return await self._call_endpoint(func_name, kwargs)
 
     def _register_as_resource(
-        self, route: "RouteBase", endpoint: "Endpoint", mcp_meta: "MCPMetadata"
-    ) -> None:  # route is RouteBase
+        self, route: Route, endpoint: Endpoint, mcp_meta: MCPMetadata
+    ) -> None:
         """Register an endpoint as an MCP resource."""
         func = endpoint.unwrapped_func
         func_name = func.__name__
@@ -111,7 +104,7 @@ class LihilMCP:
         )
 
         self._resources[resource_info.uri] = resource_info
-        self._endpoint_map[resource_info.uri] = (route, endpoint)
+        self._endpoint_map[resource_info.uri] = endpoint
 
         # Register with FastMCP
         @self.mcp_server.resource(uri=resource_info.uri)
@@ -119,9 +112,7 @@ class LihilMCP:
             """Wrapper to call the actual lihil endpoint."""
             return await self._call_endpoint_as_resource(resource_info.uri)
 
-    def _auto_register_endpoint(
-        self, route: "RouteBase", endpoint: "Endpoint"
-    ) -> None:  # route is RouteBase
+    def _auto_register_endpoint(self, route: Route, endpoint: Endpoint) -> None:
         """Automatically register an endpoint based on HTTP method."""
         func = endpoint.unwrapped_func
         func_name = func.__name__
@@ -135,7 +126,7 @@ class LihilMCP:
                 inputSchema=self._generate_input_schema(func),
             )
             self._tools[func_name] = tool_info
-            self._endpoint_map[func_name] = (route, endpoint)
+            self._endpoint_map[func_name] = endpoint
 
             @self.mcp_server.tool(name=func_name, description=tool_info.description)
             async def mcp_auto_tool_wrapper(**kwargs):
@@ -151,7 +142,7 @@ class LihilMCP:
                 mimeType="application/json",
             )
             self._resources[resource_uri] = resource_info
-            self._endpoint_map[resource_uri] = (route, endpoint)
+            self._endpoint_map[resource_uri] = endpoint
 
             @self.mcp_server.resource(uri=resource_uri)
             async def mcp_auto_resource_wrapper():
@@ -204,12 +195,12 @@ class LihilMCP:
         self,
         tool_name: str,
         kwargs: Dict[str, Union[str, int, float, bool, List, Dict]],
-    ) -> Union[str, int, float, bool, List, Dict]:
+    ) -> Union[str, int, float, bool, List, Dict, None]:
         """Call a lihil endpoint from MCP tool."""
         if tool_name not in self._endpoint_map:
             raise MCPError(f"Tool {tool_name} not found")
 
-        route, endpoint = self._endpoint_map[tool_name]
+        endpoint = self._endpoint_map[tool_name]
         func = endpoint.unwrapped_func
 
         try:
@@ -235,12 +226,12 @@ class LihilMCP:
 
     async def _call_endpoint_as_resource(
         self, uri: str
-    ) -> Union[str, int, float, bool, List, Dict]:
+    ) -> Union[str, int, float, bool, List, Dict, None]:
         """Call a lihil endpoint from MCP resource."""
         if uri not in self._endpoint_map:
             raise MCPError(f"Resource {uri} not found")
 
-        route, endpoint = self._endpoint_map[uri]
+        endpoint = self._endpoint_map[uri]
         func = endpoint.unwrapped_func
 
         try:
@@ -269,9 +260,26 @@ class LihilMCP:
         """Get registered MCP resources."""
         return self._resources.copy()
 
-    async def handle_mcp_request(
-        self, scope: Dict[str, Union[str, int, List, Dict]], receive, send
+    async def __call__(
+        self,
+        scope: IScope,
+        receive: IReceive,
+        send: ISend,
     ) -> None:
-        """Handle MCP protocol requests."""
-        # This will be implemented in the transport layer
-        pass
+        """ASGI application interface with MCP integration."""
+        if scope["type"] == "lifespan":
+            # Let Lihil handle its own lifespan, then setup MCP endpoints
+            await self.app(scope, receive, send)
+            # After Lihil startup is complete, setup MCP endpoints
+            self._setup_mcp_endpoints()
+        else:
+            # Forward all other requests to Lihil
+            await self.app(scope, receive, send)
+
+    def get_asgi_app(self) -> "LihilMCP":
+        """Get the ASGI application with MCP integration."""
+        return self
+    
+    def setup_mcp_tools_and_resources(self) -> None:
+        """Manually setup MCP tools and resources for testing or immediate use."""
+        self._setup_mcp_endpoints()

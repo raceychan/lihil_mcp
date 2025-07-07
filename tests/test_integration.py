@@ -95,13 +95,19 @@ def auto_expose_config():
 @pytest.fixture
 def lihil_mcp(lihil_app, mcp_config):
     """Create LihilMCP instance with real Lihil app."""
-    return LihilMCP(lihil_app, mcp_config)
+    mcp = LihilMCP(lihil_app, mcp_config)
+    # Manually setup MCP endpoints for testing
+    mcp.setup_mcp_tools_and_resources()
+    return mcp
 
 
 @pytest.fixture
 def auto_expose_lihil_mcp(lihil_app, auto_expose_config):
     """Create LihilMCP instance with auto-expose enabled."""
-    return LihilMCP(lihil_app, auto_expose_config)
+    mcp = LihilMCP(lihil_app, auto_expose_config)
+    # Manually setup MCP endpoints for testing
+    mcp.setup_mcp_tools_and_resources()
+    return mcp
 
 
 @pytest.fixture

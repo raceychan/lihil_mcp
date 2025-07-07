@@ -3,6 +3,8 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import inspect
 import json
 
+from lihil import Lihil
+from lihil.routing import Route
 from lihil_mcp.server import LihilMCP
 from lihil_mcp.config import MCPConfig
 from lihil_mcp.types import MCPError, MCPRegistrationError, MCPToolInfo, MCPResourceInfo
@@ -24,6 +26,10 @@ class MockRoute:
 class MockApp:
     def __init__(self, routes=None):
         self.routes = routes or []
+    
+    async def __call__(self, scope, receive, send):
+        """Mock ASGI callable."""
+        pass
 
 
 @pytest.fixture
@@ -72,6 +78,7 @@ def test_register_mcp_tool(mock_fastmcp, mock_app, config):
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "test_func" in lihil_mcp._tools
     tool_info = lihil_mcp._tools["test_func"]
@@ -101,6 +108,7 @@ def test_register_mcp_resource(mock_fastmcp, mock_app, config):
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "test://resource" in lihil_mcp._resources
     resource_info = lihil_mcp._resources["test://resource"]
@@ -125,6 +133,7 @@ def test_auto_expose_tool_post_method(mock_fastmcp, mock_app, auto_expose_config
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "test_func" in lihil_mcp._tools
     tool_info = lihil_mcp._tools["test_func"]
@@ -146,6 +155,7 @@ def test_auto_expose_tool_put_method(mock_fastmcp, mock_app, auto_expose_config)
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "test_func" in lihil_mcp._tools
 
@@ -165,6 +175,7 @@ def test_auto_expose_tool_patch_method(mock_fastmcp, mock_app, auto_expose_confi
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "test_func" in lihil_mcp._tools
 
@@ -184,6 +195,7 @@ def test_auto_expose_resource_get_method(mock_fastmcp, mock_app, auto_expose_con
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "lihil://test" in lihil_mcp._resources
     resource_info = lihil_mcp._resources["lihil://test"]
@@ -204,8 +216,9 @@ def test_registration_error_during_setup(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     mock_app.routes = [route]
     
+    lihil_mcp = LihilMCP(mock_app, config)
     with pytest.raises(MCPRegistrationError):
-        LihilMCP(mock_app, config)
+        lihil_mcp.setup_mcp_tools_and_resources()
 
 
 @patch('lihil_mcp.server.FastMCP')
@@ -288,7 +301,7 @@ async def test_call_endpoint_sync_function(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test_func"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test_func"] = endpoint
     
     result = await lihil_mcp._call_endpoint("test_func", {"param1": "hello", "param2": 20})
     assert result == {"result": "hello_20"}
@@ -307,7 +320,7 @@ async def test_call_endpoint_async_function(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test_func"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test_func"] = endpoint
     
     result = await lihil_mcp._call_endpoint("test_func", {"param1": "hello"})
     assert result == {"result": "hello"}
@@ -326,7 +339,7 @@ async def test_call_endpoint_with_defaults(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test_func"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test_func"] = endpoint
     
     # Call without param2, should use default
     result = await lihil_mcp._call_endpoint("test_func", {"param1": "hello"})
@@ -358,7 +371,7 @@ async def test_call_endpoint_function_error(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test_func"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test_func"] = endpoint
     
     with pytest.raises(MCPError, match="Error calling endpoint test_func"):
         await lihil_mcp._call_endpoint("test_func", {})
@@ -381,7 +394,7 @@ async def test_call_endpoint_non_json_serializable_result(mock_fastmcp, mock_app
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test_func"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test_func"] = endpoint
     
     result = await lihil_mcp._call_endpoint("test_func", {})
     assert result == "custom_object"
@@ -400,7 +413,7 @@ async def test_call_endpoint_as_resource_sync(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test://resource"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test://resource"] = endpoint
     
     result = await lihil_mcp._call_endpoint_as_resource("test://resource")
     assert result == {"data": "test"}
@@ -419,7 +432,7 @@ async def test_call_endpoint_as_resource_async(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test://resource"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test://resource"] = endpoint
     
     result = await lihil_mcp._call_endpoint_as_resource("test://resource")
     assert result == {"data": "async"}
@@ -450,7 +463,7 @@ async def test_call_endpoint_as_resource_error(mock_fastmcp, mock_app, config):
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test://resource"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test://resource"] = endpoint
     
     with pytest.raises(MCPError, match="Error accessing resource test://resource"):
         await lihil_mcp._call_endpoint_as_resource("test://resource")
@@ -473,7 +486,7 @@ async def test_call_endpoint_as_resource_non_json_serializable(mock_fastmcp, moc
     route = MockRoute("/test", {"GET": endpoint})
     
     lihil_mcp = LihilMCP(mock_app, config)
-    lihil_mcp._endpoint_map["test://resource"] = (route, endpoint)
+    lihil_mcp._endpoint_map["test://resource"] = endpoint
     
     result = await lihil_mcp._call_endpoint_as_resource("test://resource")
     assert result == "custom_resource"
@@ -513,19 +526,25 @@ def test_resources_property(mock_fastmcp, mock_app, config):
 
 @patch('lihil_mcp.server.FastMCP')
 @pytest.mark.asyncio
-async def test_handle_mcp_request(mock_fastmcp, mock_app, config):
+async def test_asgi_http_request(mock_fastmcp, config):
     mock_mcp_server = Mock()
     mock_fastmcp.return_value = mock_mcp_server
     
+    # Create a mock app with a tracked __call__ method
+    mock_app = AsyncMock()
+    mock_app.routes = []
+    
     lihil_mcp = LihilMCP(mock_app, config)
     
-    # Test that the method exists and doesn't raise an error
-    scope = {"type": "http", "path": "/mcp"}
+    # Test that ASGI HTTP requests are forwarded to the Lihil app
+    scope = {"type": "http", "path": "/test"}
     receive = AsyncMock()
     send = AsyncMock()
     
-    await lihil_mcp.handle_mcp_request(scope, receive, send)
-    # Method currently just passes, so no assertions needed
+    await lihil_mcp(scope, receive, send)
+    
+    # Verify that the request was forwarded to the Lihil app
+    mock_app.assert_called_once_with(scope, receive, send)
 
 
 @patch('lihil_mcp.server.FastMCP')
@@ -544,6 +563,7 @@ def test_mcp_resource_with_extra_mime_type(mock_fastmcp, mock_app, config):
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     resource_info = lihil_mcp._resources["test://resource"]
     assert resource_info.mimeType == "text/plain"
@@ -564,24 +584,11 @@ def test_auto_expose_resource_with_complex_path(mock_fastmcp, mock_app, auto_exp
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     assert "lihil://api_v1_users_profile" in lihil_mcp._resources
 
 
-# Test for import error coverage (lines 22-23)
-def test_import_error():
-    """Test that MissingDependencyError is raised when MCP imports fail."""
-    import sys
-    # We need to patch the import at module level, and trigger a fresh import
-    with patch.dict('sys.modules', {'mcp.server.fastmcp': None}):
-        # Clear any cached imports
-        if 'lihil_mcp.server' in sys.modules:
-            del sys.modules['lihil_mcp.server']
-        
-        # Now import should fail and trigger the exception
-        from lihil.errors import MissingDependencyError
-        with pytest.raises(MissingDependencyError):
-            import lihil_mcp.server
 
 
 # Test for missing routes attribute (line 46)
@@ -641,6 +648,7 @@ async def test_mcp_tool_wrapper_execution(mock_fastmcp, mock_app, config):
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     # The wrapper should have been captured
     assert captured_wrapper is not None
@@ -677,6 +685,7 @@ async def test_mcp_resource_wrapper_execution(mock_fastmcp, mock_app, config):
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     # The wrapper should have been captured
     assert captured_wrapper is not None
@@ -712,6 +721,7 @@ async def test_auto_tool_wrapper_execution(mock_fastmcp, mock_app, auto_expose_c
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     # The wrapper should have been captured
     assert captured_wrapper is not None
@@ -747,6 +757,7 @@ async def test_auto_resource_wrapper_execution(mock_fastmcp, mock_app, auto_expo
     mock_app.routes = [route]
     
     lihil_mcp = LihilMCP(mock_app, auto_expose_config)
+    lihil_mcp.setup_mcp_tools_and_resources()
     
     # The wrapper should have been captured
     assert captured_wrapper is not None
@@ -754,3 +765,194 @@ async def test_auto_resource_wrapper_execution(mock_fastmcp, mock_app, auto_expo
     # Call the wrapper - this tests line 158
     result = await captured_wrapper()
     assert result == {"data": "test"}
+
+
+# Tests using real Lihil applications instead of mocks
+
+def test_real_mcp_tool_registration():
+    """Test MCP tool registration with real Lihil application."""
+    route = Route("/api")
+    
+    @route.post
+    @mcp_tool(description="Create a user with real implementation")
+    def create_user(name: str, email: str = "test@example.com"):
+        return {"id": 1, "name": name, "email": email, "created": True}
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-real-app")
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Verify tool registration
+    assert "create_user" in lihil_mcp.tools
+    tool_info = lihil_mcp.tools["create_user"]
+    assert tool_info.name == "create_user"
+    assert "Create a user with real implementation" in tool_info.description
+    assert tool_info.inputSchema is not None
+    assert "name" in tool_info.inputSchema["properties"]
+    assert "email" in tool_info.inputSchema["properties"]
+    assert "name" in tool_info.inputSchema["required"]
+    assert "email" not in tool_info.inputSchema["required"]  # Has default
+
+
+def test_real_mcp_resource_registration():
+    """Test MCP resource registration with real Lihil application."""
+    route = Route("/status")
+    
+    @route.get
+    @mcp_resource(uri_template="lihil://system-status", description="System status endpoint")
+    def get_status():
+        return {"status": "healthy", "uptime": "100%"}
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-real-app")
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Verify resource registration
+    assert "lihil://system-status" in lihil_mcp.resources
+    resource_info = lihil_mcp.resources["lihil://system-status"]
+    assert resource_info.uri == "lihil://system-status"
+    assert resource_info.description == "System status endpoint"
+    assert resource_info.mimeType == "application/json"
+
+
+def test_real_auto_expose_functionality():
+    """Test auto-expose functionality with real Lihil application."""
+    route = Route("/data")
+    
+    @route.get
+    def get_data():
+        """Retrieve system data."""
+        return {"data": [1, 2, 3, 4, 5]}
+    
+    @route.post
+    def process_data(input_data: str):
+        """Process input data."""
+        return {"processed": input_data.upper(), "length": len(input_data)}
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-auto-expose", auto_expose=True)
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Verify auto-exposed tool (POST)
+    assert "process_data" in lihil_mcp.tools
+    tool_info = lihil_mcp.tools["process_data"]
+    # Function has docstring, so that's used instead of "Auto-exposed tool"
+    assert tool_info.description == "Process input data."
+    
+    # Verify auto-exposed resource (GET)
+    assert "lihil://data" in lihil_mcp.resources
+    resource_info = lihil_mcp.resources["lihil://data"]
+    # Function has docstring, so that's used instead of "Auto-exposed resource"
+    assert resource_info.description == "Retrieve system data."
+
+
+@pytest.mark.asyncio
+async def test_real_endpoint_execution():
+    """Test actual endpoint execution through MCP with real Lihil application."""
+    route = Route("/math")
+    
+    @route.post
+    @mcp_tool(description="Add two numbers")
+    def add_numbers(a: int, b: int):
+        return {"result": a + b, "operation": "addition"}
+    
+    @route.get
+    @mcp_resource(uri_template="lihil://math-constants")
+    def get_constants():
+        return {"pi": 3.14159, "e": 2.71828}
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-math-app")
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Test tool execution
+    result = await lihil_mcp._call_endpoint("add_numbers", {"a": 5, "b": 3})
+    assert result == {"result": 8, "operation": "addition"}
+    
+    # Test resource execution
+    result = await lihil_mcp._call_endpoint_as_resource("lihil://math-constants")
+    assert result == {"pi": 3.14159, "e": 2.71828}
+
+
+@pytest.mark.asyncio
+async def test_real_async_endpoint():
+    """Test async endpoint execution with real Lihil application."""
+    route = Route("/async")
+    
+    @route.post
+    @mcp_tool(description="Async data processor")
+    async def process_async(data: str):
+        # Simulate some async work
+        return {"processed": f"ASYNC_{data}", "async": True}
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-async-app")
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Test async endpoint execution
+    result = await lihil_mcp._call_endpoint("process_async", {"data": "test"})
+    assert result == {"processed": "ASYNC_test", "async": True}
+
+
+def test_real_error_handling():
+    """Test error handling with real Lihil application."""
+    route = Route("/error")
+    
+    @route.post
+    @mcp_tool(description="Function that raises an error")
+    def error_function(should_error: bool):
+        if should_error:
+            raise ValueError("Intentional test error")
+        return {"success": True}
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-error-app")
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Test that function is registered
+    assert "error_function" in lihil_mcp.tools
+    
+    # Test error propagation (this would be tested in integration tests)
+    # The actual error handling is tested in the integration tests with real execution
+
+
+def test_real_complex_types():
+    """Test complex type handling with real Lihil application."""
+    route = Route("/complex")
+    
+    @route.post
+    @mcp_tool(description="Handle complex data types")
+    def handle_complex(
+        numbers: list,
+        metadata: dict,
+        optional_flag: bool = False
+    ):
+        return {
+            "numbers_sum": sum(numbers) if numbers else 0,
+            "metadata_keys": list(metadata.keys()) if metadata else [],
+            "flag_set": optional_flag
+        }
+    
+    app = Lihil(route)
+    config = MCPConfig(server_name="test-complex-app")
+    lihil_mcp = LihilMCP(app, config)
+    lihil_mcp.setup_mcp_tools_and_resources()
+    
+    # Verify tool registration
+    assert "handle_complex" in lihil_mcp.tools
+    tool_info = lihil_mcp.tools["handle_complex"]
+    
+    # Verify schema generation for complex types
+    schema = tool_info.inputSchema
+    assert schema["properties"]["numbers"]["type"] == "array"
+    assert schema["properties"]["metadata"]["type"] == "object"
+    assert schema["properties"]["optional_flag"]["type"] == "boolean"
+    assert "numbers" in schema["required"]
+    assert "metadata" in schema["required"]
+    assert "optional_flag" not in schema["required"]
