@@ -1,7 +1,6 @@
 """MCP decorators for marking lihil endpoints as MCP tools and resources."""
 
-from typing import Any, Callable, Dict, Optional, TypeVar
-from functools import wraps
+from typing import Any, Callable, Optional, TypeVar
 
 from .types import MCPMetadata
 
@@ -9,10 +8,7 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def mcp_tool(
-    *,
-    title: Optional[str] = None,
-    description: Optional[str] = None,
-    **extra: Any
+    *, title: Optional[str] = None, description: Optional[str] = None, **extra: Any
 ) -> Callable[[F], F]:
     """Decorator to mark a lihil endpoint as an MCP tool.
 
@@ -28,12 +24,10 @@ def mcp_tool(
             # Email sending logic
             return f"Email sent to {to}"
     """
+
     def decorator(func: F) -> F:
         metadata = MCPMetadata(
-            type="tool",
-            title=title,
-            description=description,
-            extra=extra
+            type="tool", title=title, description=description, extra=extra
         )
         func._mcp_meta = metadata  # type: ignore
         return func
@@ -47,7 +41,7 @@ def mcp_resource(
     title: Optional[str] = None,
     description: Optional[str] = None,
     mime_type: Optional[str] = None,
-    **extra: Any
+    **extra: Any,
 ) -> Callable[[F], F]:
     """Decorator to mark a lihil endpoint as an MCP resource.
 
@@ -64,13 +58,14 @@ def mcp_resource(
         async def get_user(user_id: int) -> dict:
             return {"id": user_id, "name": "User"}
     """
+
     def decorator(func: F) -> F:
         metadata = MCPMetadata(
             type="resource",
             title=title,
             description=description,
             uri_template=uri_template,
-            extra={"mime_type": mime_type, **extra} if mime_type else extra
+            extra={"mime_type": mime_type, **extra} if mime_type else extra,
         )
         func._mcp_meta = metadata  # type: ignore
         return func

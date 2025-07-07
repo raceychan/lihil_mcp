@@ -32,11 +32,11 @@ mcp_config = MCPConfig(enabled=True, auto_expose=True)
 app.enable_mcp(mcp_config)
 
 # Your endpoints are automatically exposed as MCP tools/resources
-@app.get("/users/{user_id}")
+@app.sub("/users/{user_id}")get
 async def get_user(user_id: int) -> dict:
     return {"id": user_id, "name": "User"}
 
-@app.post("/send-email")
+@app.sub("/send-email").post
 async def send_email(to: str, subject: str, body: str) -> str:
     return f"Email sent to {to}"
 ```
@@ -52,14 +52,14 @@ mcp_config = MCPConfig(enabled=True, auto_expose=False)
 app.enable_mcp(mcp_config)
 
 # Explicitly mark endpoints as MCP tools
-@app.post("/send-email")
+@app.sub("/send-email").post
 @mcp_tool(title="Send Email", description="Send an email to a recipient")
 async def send_email(to: str, subject: str, body: str) -> str:
     # Email sending logic
     return f"Email sent to {to}"
 
 # Explicitly mark endpoints as MCP resources
-@app.get("/users/{user_id}")
+@app.sub("/users/{user_id}").get
 @mcp_resource("users://{user_id}", title="User Profile", description="Get user profile")
 async def get_user(user_id: int) -> dict:
     return {"id": user_id, "name": "User"}
@@ -119,7 +119,7 @@ config = MCPConfig(enabled=True, auth_required=True)
 MCP works seamlessly with Lihil's dependency injection system:
 
 ```python
-from lihil import Lihil, Provide
+from lihil import Lihil, Use
 from lihil_mcp import mcp_tool
 
 app = Lihil()
@@ -128,13 +128,13 @@ class EmailService:
     def send(self, to: str, subject: str, body: str) -> str:
         return f"Email sent to {to}"
 
-@app.post("/send-email")
+@app.sub("/send-email").post
 @mcp_tool(title="Send Email")
 async def send_email(
     to: str, 
     subject: str, 
     body: str,
-    email_service: EmailService = Provide()
+    email_service: Use[EmailService]
 ) -> str:
     return email_service.send(to, subject, body)
 ```
